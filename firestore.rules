@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Objectives: only the owner can read/write
+    match /objectives/{objectiveId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+
+      // Actions subcollection
+      match /actions/{actionId} {
+        allow read, write: if request.auth != null &&
+          get(/databases/$(database)/documents/objectives/$(objectiveId)).data.userId == request.auth.uid;
+      }
+
+      // Daily logs subcollection
+      match /dailyLogs/{logId} {
+        allow read, write: if request.auth != null &&
+          get(/databases/$(database)/documents/objectives/$(objectiveId)).data.userId == request.auth.uid;
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      }
+
+      // Weekly reviews subcollection
+      match /weeklyReviews/{reviewId} {
+        allow read, write: if request.auth != null &&
+          get(/databases/$(database)/documents/objectives/$(objectiveId)).data.userId == request.auth.uid;
+      }
+    }
+
+    // User achievements
+    match /userAchievements/{docId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if false;
+    }
+
+    // NLP sessions
+    match /nlpSessions/{sessionId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if false;
+    }
+  }
+}
