@@ -8,7 +8,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   serverTimestamp,
   Timestamp,
   collectionGroup,
@@ -34,28 +33,18 @@ function toISO(ts: Timestamp | string | undefined): string {
 // ─── OBJECTIVES ────────────────────────────────────────────────────────────
 
 export async function listObjectives(userId: string, status?: string): Promise<Objective[]> {
-  let q = query(
-    collection(db, 'objectives'),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
+  const snap = await getDocs(
+    query(collection(db, 'objectives'), where('userId', '==', userId))
   );
-  if (status) {
-    q = query(
-      collection(db, 'objectives'),
-      where('userId', '==', userId),
-      where('status', '==', status),
-      orderBy('createdAt', 'desc')
-    );
-  }
-  const snap = await getDocs(q);
   const objectives: Objective[] = [];
   for (const d of snap.docs) {
     const data = d.data();
-    const actionsSnap = await getDocs(
-      query(collection(db, 'objectives', d.id, 'actions'), orderBy('order', 'asc'))
-    );
+    if (status && data.status !== status) continue;
+    const actionsSnap = await getDocs(collection(db, 'objectives', d.id, 'actions'));
     const logsSnap = await getDocs(collection(db, 'objectives', d.id, 'dailyLogs'));
-    const actions = actionsSnap.docs.map(a => ({ id: a.id, ...a.data(), createdAt: toISO(a.data().createdAt), updatedAt: toISO(a.data().updatedAt) } as Action));
+    const actions = actionsSnap.docs
+      .map(a => ({ id: a.id, ...a.data(), createdAt: toISO(a.data().createdAt), updatedAt: toISO(a.data().updatedAt) } as Action))
+      .sort((a, b) => a.order - b.order);
     objectives.push({
       id: d.id,
       ...data,
@@ -65,23 +54,23 @@ export async function listObjectives(userId: string, status?: string): Promise<O
       updatedAt: toISO(data.updatedAt),
     } as Objective);
   }
-  return objectives;
+  return objectives.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function getObjective(id: string): Promise<Objective> {
   const snap = await getDoc(doc(db, 'objectives', id));
   if (!snap.exists()) throw new Error('Objective not found');
   const data = snap.data();
-  const actionsSnap = await getDocs(
-    query(collection(db, 'objectives', id, 'actions'), orderBy('order', 'asc'))
-  );
+  const actionsSnap = await getDocs(collection(db, 'objectives', id, 'actions'));
   const logsSnap = await getDocs(collection(db, 'objectives', id, 'dailyLogs'));
-  const actions = actionsSnap.docs.map(a => ({
-    id: a.id,
-    ...a.data(),
-    createdAt: toISO(a.data().createdAt),
-    updatedAt: toISO(a.data().updatedAt),
-  } as Action));
+  const actions = actionsSnap.docs
+    .map(a => ({
+      id: a.id,
+      ...a.data(),
+      createdAt: toISO(a.data().createdAt),
+      updatedAt: toISO(a.data().updatedAt),
+    } as Action))
+    .sort((a, b) => a.order - b.order);
   return {
     id: snap.id,
     ...data,
@@ -212,10 +201,10 @@ export async function getTodayLog(objectiveId: string): Promise<DailyLog | null>
 }
 
 export async function listDailyLogs(objectiveId: string): Promise<DailyLog[]> {
-  const snap = await getDocs(
-    query(collection(db, 'objectives', objectiveId, 'dailyLogs'), orderBy('date', 'desc'))
-  );
-  return snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as DailyLog));
+  const snap = await getDocs(collection(db, 'objectives', objectiveId, 'dailyLogs'));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as DailyLog))
+    .sort((a, b) => b.date!.localeCompare(a.date!));
 }
 
 // ─── WEEKLY REVIEWS ────────────────────────────────────────────────────────
@@ -231,10 +220,10 @@ export async function createWeeklyReview(objectiveId: string, data: Partial<Week
 }
 
 export async function listWeeklyReviews(objectiveId: string): Promise<WeeklyReview[]> {
-  const snap = await getDocs(
-    query(collection(db, 'objectives', objectiveId, 'weeklyReviews'), orderBy('createdAt', 'desc'))
-  );
-  return snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as WeeklyReview));
+  const snap = await getDocs(collection(db, 'objectives', objectiveId, 'weeklyReviews'));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) } as WeeklyReview))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 // ─── STATS ─────────────────────────────────────────────────────────────────
@@ -255,9 +244,7 @@ export async function getDashboardStats(userId: string): Promise<DashboardStats>
     if (obj.status === 'ACTIVE') activeObjectives++;
     if (obj.status === 'COMPLETED') completedObjectives++;
 
-    const actionsSnap = await getDocs(
-      query(collection(db, 'objectives', d.id, 'actions'), orderBy('order', 'asc'))
-    );
+    const actionsSnap = await getDocs(collection(db, 'objectives', d.id, 'actions'));
     for (const a of actionsSnap.docs) {
       const action = a.data() as Action;
       totalActions++;
@@ -320,9 +307,7 @@ export async function getObjectiveStats(objectiveId: string): Promise<ObjectiveS
   const totalActions = actionsSnap.size;
   const completedActions = actionsSnap.docs.filter(d => d.data().status === 'COMPLETED').length;
 
-  const logsSnap = await getDocs(
-    query(collection(db, 'objectives', objectiveId, 'dailyLogs'), orderBy('date', 'asc'))
-  );
+  const logsSnap = await getDocs(collection(db, 'objectives', objectiveId, 'dailyLogs'));
 
   let totalTimeInvested = 0;
   const motivationData: { date: string; motivation: number; energy: number; emotion: number }[] = [];
@@ -407,19 +392,14 @@ export async function listAchievements(userId: string): Promise<{ earned: UserAc
 
 export async function unlockAchievement(userId: string, achievementId: string): Promise<void> {
   const existing = await getDocs(
-    query(
-      collection(db, 'userAchievements'),
-      where('userId', '==', userId),
-      where('achievementId', '==', achievementId)
-    )
+    query(collection(db, 'userAchievements'), where('userId', '==', userId))
   );
-  if (existing.empty) {
-    await addDoc(collection(db, 'userAchievements'), {
-      userId,
-      achievementId,
-      unlockedAt: serverTimestamp(),
-    });
-  }
+  if (existing.docs.some(d => d.data().achievementId === achievementId)) return;
+  await addDoc(collection(db, 'userAchievements'), {
+    userId,
+    achievementId,
+    unlockedAt: serverTimestamp(),
+  });
 }
 
 // ─── NLP SESSIONS ──────────────────────────────────────────────────────────
