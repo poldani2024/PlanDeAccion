@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Plus, Save, Trash2, ChevronRight } from 'lucide-react';
-import { objectivesApi, actionsApi } from '../lib/api';
+import { getObjective, createAction, deleteAction } from '../lib/firestore';
 import { Button } from '../components/ui/Button';
 import { Input, Textarea } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -65,11 +65,11 @@ export default function ActionsPage() {
 
   const { data: objective } = useQuery<Objective>({
     queryKey: ['objective', id],
-    queryFn: () => objectivesApi.get(id!).then(r => r.data),
+    queryFn: () => getObjective(id!),
   });
 
-  const createAction = useMutation({
-    mutationFn: (data: Record<string, unknown>) => actionsApi.create(data),
+  const createActionMutation = useMutation({
+    mutationFn: (data: Parameters<typeof createAction>[1]) => createAction(id!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['objective', id] });
       setForm(DEFAULT_FORM);
@@ -77,8 +77,8 @@ export default function ActionsPage() {
     },
   });
 
-  const deleteAction = useMutation({
-    mutationFn: (actionId: string) => actionsApi.delete(actionId),
+  const deleteActionMutation = useMutation({
+    mutationFn: (actionId: string) => deleteAction(id!, actionId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['objective', id] }),
   });
 
@@ -86,14 +86,13 @@ export default function ActionsPage() {
     if (!form.title.trim()) return;
     setSaving(true);
     try {
-      await createAction.mutateAsync({
-        objectiveId: id!,
+      await createActionMutation.mutateAsync({
         title: form.title,
         description: form.description || undefined,
         estimatedTime: form.estimatedTime ? parseInt(form.estimatedTime) : undefined,
-        difficulty: form.difficulty,
-        energyLevel: form.energyLevel,
-        priority: form.priority,
+        difficulty: form.difficulty as Action['difficulty'],
+        energyLevel: form.energyLevel as Action['energyLevel'],
+        priority: form.priority as Action['priority'],
         category: form.category || undefined,
         notes: form.notes || undefined,
       });
@@ -147,7 +146,7 @@ export default function ActionsPage() {
                 </div>
               </div>
               <button
-                onClick={() => deleteAction.mutate(action.id)}
+                onClick={() => deleteActionMutation.mutate(action.id)}
                 className="p-1.5 text-gray-300 hover:text-red-400 transition-colors"
               >
                 <Trash2 size={14} />

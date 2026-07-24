@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { BarChart2, Clock, Target, Flame, Zap, Heart, TrendingUp } from 'lucide-react';
-import { statsApi } from '../lib/api';
+import { getDashboardStats, getActivityHeatmap } from '../lib/firestore';
+import { useAuthStore } from '../store/auth';
 import { Card } from '../components/ui/Card';
 import { formatMinutes } from '../lib/utils';
 import type { DashboardStats } from '../types';
@@ -41,14 +42,18 @@ function ActivityHeatmap({ data }: { data: Record<string, { count: number; total
 }
 
 export default function StatsPage() {
+  const { user } = useAuthStore();
+
   const { data: stats } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
-    queryFn: () => statsApi.dashboard().then(r => r.data),
+    queryFn: () => getDashboardStats(user!.id),
+    enabled: !!user,
   });
 
   const { data: heatmap = {} } = useQuery<Record<string, { count: number; totalTime: number }>>({
     queryKey: ['activity-heatmap'],
-    queryFn: () => statsApi.heatmap().then(r => r.data),
+    queryFn: () => getActivityHeatmap(user!.id),
+    enabled: !!user,
   });
 
   const completionRate = stats && stats.totalActions > 0

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Check, Plus, X } from 'lucide-react';
-import { objectivesApi } from '../lib/api';
+import { createObjective } from '../lib/firestore';
+import { useAuthStore } from '../store/auth';
 import { Button } from '../components/ui/Button';
 import { Textarea } from '../components/ui/Input';
 import { useQueryClient } from '@tanstack/react-query';
@@ -161,6 +162,7 @@ function TagInput({
 export default function NewObjectivePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<StepData>({
@@ -199,10 +201,10 @@ export default function NewObjectivePage() {
   async function handleSubmit() {
     setLoading(true);
     try {
-      const res = await objectivesApi.create(data as unknown as Record<string, unknown>);
+      const obj = await createObjective(user!.id, data);
       queryClient.invalidateQueries({ queryKey: ['objectives'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      navigate(`/objetivos/${res.data.id}/acciones`);
+      navigate(`/objetivos/${obj.id}/acciones`);
     } catch {
       setLoading(false);
     }

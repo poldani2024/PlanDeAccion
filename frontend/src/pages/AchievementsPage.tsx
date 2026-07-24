@@ -1,15 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Trophy, Lock } from 'lucide-react';
-import { achievementsApi } from '../lib/api';
+import { listAchievements } from '../lib/firestore';
+import { useAuthStore } from '../store/auth';
 import { Card } from '../components/ui/Card';
 import { formatDate } from '../lib/utils';
 import type { Achievement, UserAchievement } from '../types';
 
 export default function AchievementsPage() {
+  const { user } = useAuthStore();
   const { data, isLoading } = useQuery<{ earned: UserAchievement[]; all: Achievement[] }>({
     queryKey: ['achievements'],
-    queryFn: () => achievementsApi.list().then(r => r.data),
+    queryFn: () => listAchievements(user!.id),
+    enabled: !!user,
   });
 
   const earnedIds = new Set(data?.earned.map(e => e.achievement.id) ?? []);

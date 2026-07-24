@@ -6,7 +6,7 @@ import {
   ChevronLeft, Plus, CheckCircle2, Circle, Clock, Zap, ArrowRight,
   BarChart2, Calendar, BookOpen, Brain, Target, Flame
 } from 'lucide-react';
-import { objectivesApi, actionsApi, statsApi } from '../lib/api';
+import { getObjective, updateAction, getObjectiveStats } from '../lib/firestore';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -65,18 +65,18 @@ export default function ObjectiveDetailPage() {
 
   const { data: objective, isLoading } = useQuery<Objective>({
     queryKey: ['objective', id],
-    queryFn: () => objectivesApi.get(id!).then(r => r.data),
+    queryFn: () => getObjective(id!),
   });
 
   const { data: stats } = useQuery<ObjectiveStats>({
     queryKey: ['objective-stats', id],
-    queryFn: () => statsApi.objective(id!).then(r => r.data),
+    queryFn: () => getObjectiveStats(id!),
     enabled: tab === 'estadisticas',
   });
 
   const toggleAction = useMutation({
     mutationFn: ({ actionId, status }: { actionId: string; status: string }) =>
-      actionsApi.update(actionId, { status }),
+      updateAction(id!, actionId, { status: status as Action['status'] }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['objective', id] });
       queryClient.invalidateQueries({ queryKey: ['objective-stats', id] });

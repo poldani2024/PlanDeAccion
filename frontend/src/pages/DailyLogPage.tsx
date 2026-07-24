@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Check, AlertCircle } from 'lucide-react';
-import { objectivesApi, dailyLogsApi } from '../lib/api';
+import { getObjective, createDailyLog } from '../lib/firestore';
+import { useAuthStore } from '../store/auth';
 import { Button } from '../components/ui/Button';
 import { Textarea } from '../components/ui/Input';
 import { Slider } from '../components/ui/Slider';
@@ -51,13 +52,15 @@ export default function DailyLogPage() {
     blockerNote: '',
   });
 
+  const { user } = useAuthStore();
+
   const { data: objective } = useQuery<Objective>({
     queryKey: ['objective', id],
-    queryFn: () => objectivesApi.get(id!).then(r => r.data),
+    queryFn: () => getObjective(id!),
   });
 
   const saveLog = useMutation({
-    mutationFn: (logData: Record<string, unknown>) => dailyLogsApi.create(logData),
+    mutationFn: (logData: Parameters<typeof createDailyLog>[1]) => createDailyLog(user!.id, logData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['objective', id] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
@@ -87,8 +90,8 @@ export default function DailyLogPage() {
       timeInvested: data.timeInvested ? parseInt(data.timeInvested) : undefined,
       comments: data.comments || undefined,
       learnings: data.learnings || undefined,
-      blockerType: data.hadBlocker && data.blockerType ? data.blockerType : undefined,
-      blockerNote: data.hadBlocker && data.blockerNote ? data.blockerNote : undefined,
+      blockerType: (data.hadBlocker && data.blockerType) ? data.blockerType : undefined,
+      blockerNote: (data.hadBlocker && data.blockerNote) ? data.blockerNote : undefined,
       actionLogs: [
         ...data.completedActionIds.map(actionId => ({ actionId, completed: true })),
         ...pendingActions

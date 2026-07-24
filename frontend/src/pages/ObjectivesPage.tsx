@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Target, CheckCircle2, Pause, Archive, MoreHorizontal, ChevronRight } from 'lucide-react';
-import { objectivesApi } from '../lib/api';
+import { listObjectives, updateObjective } from '../lib/firestore';
+import { useAuthStore } from '../store/auth';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -27,7 +28,7 @@ function ObjectiveCard({ objective }: { objective: Objective }) {
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   const updateStatus = useMutation({
-    mutationFn: (status: string) => objectivesApi.updateStatus(objective.id, status),
+    mutationFn: (status: string) => updateObjective(objective.id, { status: status as Objective['status'] }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['objectives'] }),
   });
 
@@ -117,10 +118,12 @@ function ObjectiveCard({ objective }: { objective: Objective }) {
 
 export default function ObjectivesPage() {
   const [filter, setFilter] = useState<'ACTIVE' | 'COMPLETED' | 'ALL'>('ACTIVE');
+  const { user } = useAuthStore();
 
   const { data: objectives = [], isLoading } = useQuery<Objective[]>({
     queryKey: ['objectives', filter],
-    queryFn: () => objectivesApi.list(filter !== 'ALL' ? filter : undefined).then(r => r.data),
+    queryFn: () => listObjectives(user!.id, filter !== 'ALL' ? filter : undefined),
+    enabled: !!user,
   });
 
   const activeCount = objectives.filter(o => o.status === 'ACTIVE').length;

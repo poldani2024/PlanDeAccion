@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, ChevronLeft, ChevronRight, Check, Sparkles } from 'lucide-react';
-import { nlpApi } from '../lib/api';
+import { createNlpSession } from '../lib/firestore';
+import { useAuthStore } from '../store/auth';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Textarea } from '../components/ui/Input';
@@ -28,13 +29,108 @@ const TECHNIQUE_EMOJIS: Record<string, string> = {
   TIMELINE: '⏳',
 };
 
+const TECHNIQUES: NlpTechniqueInfo[] = [
+  {
+    key: 'REFRAMING',
+    name: 'Reencuadre',
+    description: 'Cambiá la perspectiva con la que ves una situación para encontrar nuevos significados y posibilidades.',
+    stepCount: 5,
+    steps: [
+      { title: 'Identificá la situación', instruction: 'Pensá en una situación que te genera malestar o bloqueo. Describila con detalle.', reflection: '¿Qué situación querés reencuadrar?' },
+      { title: 'Explorá el contexto', instruction: '¿En qué contexto esta situación podría ser útil o tener un lado positivo?', reflection: '¿Qué aspectos positivos podría tener esta situación en otro contexto?' },
+      { title: 'Buscá la intención positiva', instruction: '¿Qué parte de vos está tratando de protegerte o ayudarte con esta situación?', reflection: '¿Cuál es la intención positiva detrás de este comportamiento o creencia?' },
+      { title: 'Generá alternativas', instruction: 'Pensá en al menos 3 formas diferentes de ver esta misma situación.', reflection: '¿Qué otras interpretaciones son posibles?' },
+      { title: 'Elegí el nuevo encuadre', instruction: 'Seleccioná la perspectiva que te resulte más útil y empoderantne.', reflection: '¿Cuál es la nueva interpretación que querés adoptar?' },
+    ],
+  },
+  {
+    key: 'ANCHORING',
+    name: 'Anclaje',
+    description: 'Asociá un estado interno positivo a un estímulo físico para acceder a él cuando lo necesitás.',
+    stepCount: 5,
+    steps: [
+      { title: 'Elegí el estado que querés anclar', instruction: 'Pensá en un estado emocional que quieras tener disponible: confianza, calma, energía, enfoque...', reflection: '¿Qué estado emocional querés anclar?' },
+      { title: 'Recordá cuando lo viviste', instruction: 'Traé a tu mente un momento en que experimentaste ese estado con intensidad. Viví ese recuerdo vívidamente.', reflection: '¿En qué momento lo sentiste con más fuerza?' },
+      { title: 'Intensificá la experiencia', instruction: 'Mientras revivís ese momento, amplificá las imágenes, sonidos y sensaciones. ¿Qué ves, escuchás y sentís?', reflection: 'Describi el recuerdo en detalle sensorial.' },
+      { title: 'Establecé el ancla', instruction: 'En el pico de la emoción, aplicá un estímulo físico único: apretá dos dedos, tocá tu muñeca, una postura específica.', reflection: '¿Qué estímulo físico elegiste para tu ancla?' },
+      { title: 'Probá el ancla', instruction: 'Interrumpí el estado, pensá en algo neutro. Ahora activá tu ancla. ¿Qué sensaciones te genera?', reflection: '¿Qué ocurre cuando activás el ancla?' },
+    ],
+  },
+  {
+    key: 'SWITCH_PATTERN',
+    name: 'Switch Pattern',
+    description: 'Reemplazá un patrón mental limitante por uno que te impulse hacia tus objetivos.',
+    stepCount: 4,
+    steps: [
+      { title: 'Identificá el patrón actual', instruction: '¿Cuál es la imagen mental o pensamiento que aparece justo antes de caer en el comportamiento que querés cambiar?', reflection: '¿Qué imagen o pensamiento dispara el patrón que querés cambiar?' },
+      { title: 'Creá la imagen deseada', instruction: 'Creá una imagen vívida de vos mismo con el nuevo comportamiento o estado. ¿Cómo te ves, sentís y escuchás?', reflection: '¿Cómo es la imagen de la versión de vos que ya logró el cambio?' },
+      { title: 'Hacé el switch', instruction: 'Visualizá la imagen del patrón actual, grande y clara. Luego, rápidamente, hacé que explote y sea reemplazada por la imagen deseada. Repetí 5 veces.', reflection: '¿Cómo se sintió el proceso de cambio?' },
+      { title: 'Verificá el resultado', instruction: 'Intentá volver a pensar en la situación original. ¿Qué ocurre ahora? ¿La imagen cambió?', reflection: '¿Qué diferencia notás en cómo experimentás la situación ahora?' },
+    ],
+  },
+  {
+    key: 'SUBMODALITIES',
+    name: 'Submodalidades',
+    description: 'Modificá las cualidades sensoriales de tus representaciones mentales para cambiar su impacto emocional.',
+    stepCount: 5,
+    steps: [
+      { title: 'Elegí una creencia o recuerdo', instruction: 'Pensá en una creencia limitante o un recuerdo que te genere malestar que quieras trabajar.', reflection: '¿Qué creencia o recuerdo querés transformar?' },
+      { title: 'Explorá las submodalidades visuales', instruction: '¿Es una imagen? ¿Está en color o blanco y negro? ¿Es grande o pequeña? ¿Está cerca o lejos? ¿Tiene movimiento?', reflection: 'Describi las características visuales de la imagen mental.' },
+      { title: 'Explorá las submodalidades auditivas y kinestésicas', instruction: '¿Hay sonidos o voces? ¿Son fuertes o suaves? ¿Hay sensaciones en el cuerpo? ¿Dónde las sentís?', reflection: 'Describi las características auditivas y corporales.' },
+      { title: 'Modificá las submodalidades', instruction: 'Hacé la imagen más pequeña, más lejana, en blanco y negro. Bajá el volumen. ¿Cómo cambia la emoción?', reflection: '¿Qué cambios de submodalidades producen mayor alivio?' },
+      { title: 'Instalá el nuevo estado', instruction: 'Ahora creá una imagen del estado deseado con submodalidades poderosas: grande, brillante, colorida, cercana. ¿Cómo te sentís?', reflection: '¿Cómo se siente la nueva representación?' },
+    ],
+  },
+  {
+    key: 'PARTS_INTEGRATION',
+    name: 'Integración de Partes',
+    description: 'Reconciliá partes conflictivas de tu personalidad para recuperar energía y coherencia interna.',
+    stepCount: 5,
+    steps: [
+      { title: 'Identificá el conflicto', instruction: '¿Sientes que una parte de vos quiere algo y otra parte quiere otra cosa? Describí el conflicto.', reflection: '¿Cuál es el conflicto interno que estás experimentando?' },
+      { title: 'Conocé la primera parte', instruction: 'Imaginate la primera parte en tu mano dominante. ¿Cómo es? ¿Qué forma tiene? ¿Qué dice? ¿Qué quiere?', reflection: 'Describi la primera parte y su intención positiva.' },
+      { title: 'Conocé la segunda parte', instruction: 'Imaginate la segunda parte en tu otra mano. ¿Cómo es? ¿Qué forma tiene? ¿Qué dice? ¿Qué quiere en el fondo?', reflection: 'Describi la segunda parte y su intención positiva.' },
+      { title: 'Encontrá el objetivo común', instruction: '¿En qué están de acuerdo ambas partes? ¿Cuál es el objetivo más profundo que comparten?', reflection: '¿Cuál es el objetivo común de ambas partes?' },
+      { title: 'Integrá las partes', instruction: 'Lentamente acercá las manos hasta juntarlas, sintiendo cómo las partes se fusionan. Llevá esa energía integrada al centro de tu pecho.', reflection: '¿Cómo se siente la integración? ¿Qué cambia?' },
+    ],
+  },
+  {
+    key: 'LOGICAL_LEVELS',
+    name: 'Niveles Lógicos',
+    description: 'Analizá el cambio en los diferentes niveles neurológicos: entorno, comportamiento, capacidades, creencias, identidad y propósito.',
+    stepCount: 6,
+    steps: [
+      { title: 'Entorno', instruction: '¿Dónde y cuándo ocurre la situación que querés cambiar? ¿Qué hay en tu entorno que facilita o dificulta el cambio?', reflection: '¿Qué condiciones de tu entorno influyen en esta situación?' },
+      { title: 'Comportamiento', instruction: '¿Qué hacés específicamente? ¿Qué comportamientos concretos querés cambiar o desarrollar?', reflection: '¿Qué hacés y qué querés hacer diferente?' },
+      { title: 'Capacidades', instruction: '¿Qué habilidades tenés disponibles? ¿Qué nuevas capacidades necesitás desarrollar para lograr el cambio?', reflection: '¿Qué capacidades te faltan para el cambio?' },
+      { title: 'Creencias y valores', instruction: '¿Qué creés sobre vos mismo y sobre el mundo? ¿Qué valores están en juego? ¿Qué creencias te limitan?', reflection: '¿Qué creencias o valores están detrás de esta situación?' },
+      { title: 'Identidad', instruction: '¿Quién sos vos? ¿Cómo te definís? ¿Cómo el cambio que buscás se relaciona con quién querés ser?', reflection: '¿Cómo este cambio se conecta con tu identidad?' },
+      { title: 'Propósito y conexión', instruction: '¿Para qué? ¿Cuál es el propósito mayor detrás de este cambio? ¿Cómo conecta con algo más grande que vos?', reflection: '¿Cuál es el propósito más elevado de este cambio?' },
+    ],
+  },
+  {
+    key: 'TIMELINE',
+    name: 'Línea del Tiempo',
+    description: 'Viajá mentalmente por tu línea del tiempo para sanar el pasado y construir un futuro poderoso.',
+    stepCount: 5,
+    steps: [
+      { title: 'Visualizá tu línea del tiempo', instruction: 'Imaginá tu línea del tiempo como una línea en el espacio. ¿El pasado está detrás tuyo? ¿Delante? ¿A tu izquierda? Observala.', reflection: '¿Cómo percibís tu línea del tiempo?' },
+      { title: 'Revisitá el pasado', instruction: 'Flotá sobre tu línea del tiempo hacia el pasado. Encontrá un evento que ya superaste y que te dio fortaleza. ¿Qué recurso encontrás ahí?', reflection: '¿Qué fortaleza o aprendizaje encontrás en tu pasado?' },
+      { title: 'Anclate en el presente', instruction: 'Regresá al presente. ¿Qué recursos del pasado traés con vos? ¿Qué te dice tu yo presente que necesita?', reflection: '¿Qué recursos del pasado traés al presente?' },
+      { title: 'Construí el futuro', instruction: 'Flotá hacia el futuro donde ya lograste tu objetivo. ¿Qué ves, escuchás y sentís? Describí ese momento vívidamente.', reflection: '¿Cómo es ese futuro donde ya lograste tu objetivo?' },
+      { title: 'Activá el camino', instruction: 'Desde ese futuro, mirá hacia atrás al presente. ¿Qué pasos tomaste para llegar ahí? ¿Qué consejo te da tu yo futuro?', reflection: '¿Qué mensaje te da tu yo futuro?' },
+    ],
+  },
+];
+
 function TechniqueSession({ technique, onBack }: { technique: NlpTechniqueInfo; onBack: () => void }) {
   const [step, setStep] = useState(0);
   const [notes, setNotes] = useState<string[]>(technique.steps?.map(() => '') ?? []);
   const [completed, setCompleted] = useState(false);
+  const { user } = useAuthStore();
 
   const saveSession = useMutation({
-    mutationFn: () => nlpApi.createSession({ technique: technique.key, notes: notes.join('\n---\n'), completed: true }),
+    mutationFn: () => createNlpSession(user!.id, { technique: technique.key, notes: notes.join('\n---\n'), completed: true }),
     onSuccess: () => setCompleted(true),
   });
 
@@ -78,51 +174,39 @@ function TechniqueSession({ technique, onBack }: { technique: NlpTechniqueInfo; 
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
-          className="flex flex-col gap-4"
+          transition={{ duration: 0.2 }}
+          className="flex flex-col gap-5"
         >
-          <div className="bg-gradient-to-br from-indigo-50 to-violet-50 rounded-2xl p-5">
-            <p className="text-xs font-semibold text-indigo-500 uppercase tracking-wide mb-2">
-              Paso {step + 1}: {currentStep.title}
-            </p>
-            <p className="text-gray-800 leading-relaxed">{currentStep.instruction}</p>
-            {currentStep.reflection && (
-              <p className="text-sm text-indigo-600 mt-3 italic">💭 {currentStep.reflection}</p>
-            )}
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">{currentStep.title}</h2>
+            <p className="text-gray-600 leading-relaxed">{currentStep.instruction}</p>
           </div>
 
-          <Textarea
-            label="Tu reflexión (opcional)"
-            rows={3}
-            placeholder="Escribí lo que sentís, pensás o descubrís..."
-            value={notes[step]}
-            onChange={(e) => {
-              const updated = [...notes];
-              updated[step] = e.target.value;
-              setNotes(updated);
-            }}
-          />
+          {currentStep.reflection && (
+            <Textarea
+              label={currentStep.reflection}
+              rows={4}
+              placeholder="Escribí tu respuesta aquí..."
+              value={notes[step]}
+              onChange={(e) => setNotes(n => { const copy = [...n]; copy[step] = e.target.value; return copy; })}
+            />
+          )}
 
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             {step > 0 && (
-              <Button variant="secondary" size="lg" onClick={() => setStep(s => s - 1)}>
+              <Button variant="ghost" onClick={() => setStep(s => s - 1)}>
                 <ChevronLeft size={16} /> Anterior
               </Button>
             )}
-            <Button
-              size="lg"
-              className="flex-1"
-              onClick={() => {
-                if (step < steps.length - 1) setStep(s => s + 1);
-                else saveSession.mutate();
-              }}
-              loading={saveSession.isPending}
-            >
-              {step < steps.length - 1 ? (
-                <> Siguiente <ChevronRight size={16} /></>
-              ) : (
-                <> Completar <Check size={16} /></>
-              )}
-            </Button>
+            {step < steps.length - 1 ? (
+              <Button className="flex-1" onClick={() => setStep(s => s + 1)}>
+                Continuar <ChevronRight size={16} />
+              </Button>
+            ) : (
+              <Button className="flex-1" loading={saveSession.isPending} onClick={() => saveSession.mutate()}>
+                <Check size={16} /> Completar sesión
+              </Button>
+            )}
           </div>
         </motion.div>
       </AnimatePresence>
@@ -132,16 +216,6 @@ function TechniqueSession({ technique, onBack }: { technique: NlpTechniqueInfo; 
 
 export default function NlpPage() {
   const [selected, setSelected] = useState<NlpTechniqueInfo | null>(null);
-
-  const { data: techniques = [], isLoading } = useQuery<NlpTechniqueInfo[]>({
-    queryKey: ['nlp-techniques'],
-    queryFn: () => nlpApi.techniques().then(r => r.data),
-  });
-
-  const openTechnique = useMutation({
-    mutationFn: (key: string) => nlpApi.technique(key).then(r => r.data),
-    onSuccess: (data) => setSelected(data),
-  });
 
   if (selected) {
     return <TechniqueSession technique={selected} onBack={() => setSelected(null)} />;
@@ -172,30 +246,24 @@ export default function NlpPage() {
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="grid sm:grid-cols-2 gap-3">
-          {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-gray-100 rounded-2xl animate-pulse" />)}
-        </div>
-      ) : (
-        <div className="grid sm:grid-cols-2 gap-3">
-          {techniques.map((tech) => (
-            <motion.div key={tech.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
-              <Card
-                hover
-                onClick={() => openTechnique.mutate(tech.key)}
-                className="cursor-pointer"
-              >
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${TECHNIQUE_COLORS[tech.key] ?? 'from-gray-400 to-gray-600'} flex items-center justify-center text-xl mb-3`}>
-                  {TECHNIQUE_EMOJIS[tech.key]}
-                </div>
-                <h3 className="font-semibold text-gray-900 mb-1">{tech.name}</h3>
-                <p className="text-sm text-gray-500 line-clamp-2">{tech.description}</p>
-                <p className="text-xs text-gray-400 mt-2">{tech.stepCount} pasos</p>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-      )}
+      <div className="grid sm:grid-cols-2 gap-3">
+        {TECHNIQUES.map((tech) => (
+          <motion.div key={tech.key} whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}>
+            <Card
+              hover
+              onClick={() => setSelected(tech)}
+              className="cursor-pointer"
+            >
+              <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${TECHNIQUE_COLORS[tech.key] ?? 'from-gray-400 to-gray-600'} flex items-center justify-center text-xl mb-3`}>
+                {TECHNIQUE_EMOJIS[tech.key]}
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-1">{tech.name}</h3>
+              <p className="text-sm text-gray-500 line-clamp-2">{tech.description}</p>
+              <p className="text-xs text-gray-400 mt-2">{tech.stepCount} pasos</p>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
     </div>
   );
 }

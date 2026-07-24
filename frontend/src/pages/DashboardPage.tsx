@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Target, Flame, Clock, TrendingUp, ChevronRight, Zap, Heart } from 'lucide-react';
-import { statsApi } from '../lib/api';
+import { getDashboardStats } from '../lib/firestore';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { useAuthStore } from '../store/auth';
@@ -55,7 +55,8 @@ export default function DashboardPage() {
   const { user } = useAuthStore();
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
-    queryFn: () => statsApi.dashboard().then(r => r.data),
+    queryFn: () => getDashboardStats(user!.id),
+    enabled: !!user,
   });
 
   const hour = new Date().getHours();
